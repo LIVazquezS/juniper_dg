@@ -1,0 +1,19 @@
+{
+  "meta": {
+    "saved_at": "2026-03-17T15:18:59.891323Z",
+    "version": 1
+  },
+  "input_dims": {
+    "X": 4,
+    "E": 5,
+    "y": 4,
+    "guidance": 4
+  },
+  "output_dims": {
+    "X": 4,
+    "E": 5,
+    "y": 4
+  },
+  "num_classes": 4,
+  "max_n_nodes": 9
+}

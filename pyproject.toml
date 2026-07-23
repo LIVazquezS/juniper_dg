@@ -1,11 +1,20 @@
 [project]
-name = "blank-app-template"
+name = "juniper_dg"
+author="Luis Itza Vazquez-Salazar"
 version = "0.1.0"
-description = "A simple Streamlit app template."
+description = "Streamlit app for generating molecules from values of partition coefficient or from martini bead identity"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "streamlit>=1.59.0",
+      "torch>=2.10.0",
+    "torch-geometric>=2.7.0",
+    "lightning>=2.6.0",
+    "lightning-utilities>=0.15.2",
+        "numpy>=2.4.1",
+            "pandas>=3.0.0",
+    "pandas-stubs~=3.0.2",
+        "rdkit>=2025.9.3",
 ]
 
 [tool.uv]
