@@ -13,7 +13,7 @@ dependencies = [
     "lightning-utilities>=0.15.2",
         "numpy>=2.5.1",
             "pandas>=3.0.5",
-    "pandas-stubs~=3.0.2",
+    "pandas-stubs~=3.0.5",
         "rdkit>=2025.9.3",
 ]
 
