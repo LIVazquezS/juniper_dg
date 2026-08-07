@@ -6,15 +6,15 @@ description = "Streamlit app for generating molecules from values of partition c
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "streamlit>=1.60.0",
+    "streamlit>=1.61.0",
       "torch>=2.10.0",
     "torch-geometric>=2.7.0",
     "lightning>=2.6.0",
     "lightning-utilities>=0.15.2",
         "numpy>=2.5.1",
             "pandas>=3.0.5",
-    "pandas-stubs~=3.0.2",
-        "rdkit>=2025.9.3",
+    "pandas-stubs~=3.0.5",
+        "rdkit>=2026.3.5",
 ]
 
 [tool.uv]
