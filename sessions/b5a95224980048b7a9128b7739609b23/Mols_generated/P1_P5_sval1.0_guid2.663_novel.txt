@@ -1,5 +1,0 @@
-Nc1nc(=NO)on1O
-N#CC(=O)C(O)CO
-NCC(F)=CNC(N)=O
-CNN=CN1CC1CN
-NN=c1cncnn1N
