@@ -4,7 +4,7 @@ author="Luis Itza Vazquez-Salazar"
 version = "0.1.0"
 description = "Streamlit app for generating molecules from values of partition coefficient or from martini bead identity"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 dependencies = [
     "streamlit>=1.60.0",
     "torch>=2.10.0",
