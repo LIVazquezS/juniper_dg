@@ -11,7 +11,6 @@ import torch.nn.functional as F
 from rdkit import Chem, RDLogger
 #Others
 from tqdm import tqdm
-import re
 import os.path as osp
 import os
 import pathlib
@@ -25,21 +24,15 @@ from utils.rdkit_functions import build_molecule
 
 class DataManagment:
 
-    # List of permitted atoms mainly CNOS and halogens.
+
+    # List of permitted atoms.
     permitted_list_of_atoms = ['C', 'N', 'O', 'F']
     # List of permitted number of heavy neighbors. Max number of heavy neighbors is 4.
     permitted_list_of_neighbors = [0, 1, 2, 3, 4]
     # List of permitted bond types
     permitted_list_of_bond_types = [Chem.rdchem.BondType.SINGLE, Chem.rdchem.BondType.DOUBLE,
                                     Chem.rdchem.BondType.TRIPLE, Chem.rdchem.BondType.AROMATIC]
-    # List of Beads
-    beads_types = ['C1', 'C2', 'C3', 'C4', 'C5', 'N0', 'Na', 'Nd', 'Nda', 'P1', 'P2', 'P3', 'P4', 'P5']
-    dg_bead = {'C1':-3.394, 'C2':-3.284, 'C3':-2.930, 'C4':-2.424, 'C5':-1.656,
-               'N0':-1.009, 'Na':-0.595, 'Nd':-0.595, 'Nda':-0.595,
-               'P1':0.540, 'P2':0.920, 'P3':2.106, 'P4':2.223, 'P5':2.122,
-               'SC1':-3.394, 'SC2':-3.284, 'SC3':-2.930,'SC4':-2.424, 'SC5':-1.656,
-               'SN0':-1.009, 'SNa':-0.595, 'SNd':-0.595,'SNda':-0.595,
-               'SP1':0.540, 'SP2':0.920, 'SP3':2.106, 'SP4':2.223, 'SP5':2.122}
+
 
     def __init__(self,
                  name,
@@ -51,6 +44,8 @@ class DataManagment:
                  filter_dataset=True,
                  save_process=True):
         '''
+
+        This only takes the value of DG_WO_CG as guidance. Save it in a vector guidance.
 
         :param name: name of the dataset
         :param data_file: It is a .csv file with the smiles of the molecules
@@ -94,23 +89,6 @@ class DataManagment:
         self.valid_data = self.data.iloc[self.idx_valid]
         self.test_data = self.data.iloc[self.idx_test]
 
-        self.beads_labels = {bead: i for i, bead in enumerate(self.beads_types)}
-        self.n_beads_types =len(self.beads_labels)
-        self.n_nodes_bead = 2
-
-        # Calculate the frequency of beads
-        if osp.exists('bead_count.csv'):
-            df = pd.read_csv('bead_count.csv')
-            self.bead_freqs = df.to_dict('records')[0]
-        else:
-            print('The bead count file does not exist. This file is for handling class imbalance. It would be created')
-            canonic_beads = [self.canonical_reverse(b) for b in self.data['martini_bead']]
-            unique, counts = np.unique(canonic_beads, return_counts=True)
-            self.bead_freqs = {j: counts[i] for i, j in enumerate(unique)}
-            df_bead_freq = pd.DataFrame(self.bead_freqs, index=[0])
-            df_bead_freq.to_csv('bead_count.csv',index=False)
-
-
 
     @staticmethod
     def mol2smiles(mol):
@@ -137,60 +115,6 @@ class DataManagment:
 
         return data, slices
 
-    @staticmethod
-    def get_edges_bead(n, device=None):
-        if n < 2:
-            return torch.empty((2, 0), dtype=torch.long, device=device)
-        src = torch.arange(n - 1, dtype=torch.long, device=device)
-        dst = torch.arange(1, n, dtype=torch.long, device=device)
-        return torch.cat([torch.stack([src, dst], 0),
-                          torch.stack([dst, src], 0)], dim=1)
-
-    ## Function to remove permutational invariance
-    @staticmethod
-    def canonical_reverse(s, sep='_'):
-        parts = s.split(sep)
-        rev = parts[::-1]
-        canon = parts if parts <= rev else rev
-        return sep.join(canon)
-
-    def process_bead(self, mol):
-        mol_can = self.canonical_reverse(mol)
-        bead_sp = re.split(r'[-,_]+', mol_can)
-        num_beads = len(bead_sp)
-        is_s = [b[:1] == "S" for b in bead_sp]
-        keys = [b[1:] if s else b for b, s in zip(bead_sp, is_s)]
-        idx = [self.beads_labels[k] for k in keys]
-        dg = [self.dg_bead[b] for b in bead_sp]
-
-        idx_t = torch.tensor(idx, dtype=torch.long)
-        is_s_t = torch.tensor(is_s, dtype=torch.long)
-
-        x_type = F.one_hot(idx_t, self.n_beads_types + 1).float()
-        x_size = torch.stack((is_s_t, 1 - is_s_t), dim=1).float()
-        x_dg = torch.tensor(dg, dtype=torch.float32).unsqueeze(1)
-        x = torch.cat((x_type, x_size, x_dg), dim=1)
-        # Pad to fixed size and mark padded rows as dummy nodes
-        n_nodes = self.n_nodes_bead  # fixed max number of nodes
-        feat_dim = x.shape[1]
-        x_padded = torch.zeros((n_nodes, feat_dim), dtype=x.dtype, device=x.device)
-
-        n_keep = min(num_beads, n_nodes)
-        x_padded[:n_keep] = x[:n_keep]
-
-        if n_keep < n_nodes:
-            # Set dummy node type = 1 for padded nodes
-            x_padded[n_keep:, : self.n_beads_types + 1] = 0.0
-            x_padded[n_keep:, self.n_beads_types] = 1.0
-            #DG is also 0
-            x_padded[n_keep:, self.n_beads_types + 1:] = 0.0
-
-        x = x_padded
-
-        e_index = self.get_edges_bead(n_keep, device=x.device)
-        bead_freq = self.bead_freqs[mol_can]
-        return x, e_index, bead_freq
-
 
     def process_graphs(self, data,path_to_save,type):
         """
@@ -203,11 +127,15 @@ class DataManagment:
 
         smiles_list = data['smiles'].values
         beads_list = data['martini_bead'].values
+        dg_wo_cg = data['dg_wo_cg'].values
 
         data_list = []
         smiles_kept = []
         for i, smile in enumerate(tqdm(smiles_list)):
             mol = Chem.MolFromSmiles(smile)
+            if mol is None:
+                continue
+
             N = mol.GetNumAtoms()
 
             type_idx = []
@@ -234,8 +162,7 @@ class DataManagment:
 
             x = F.one_hot(torch.tensor(type_idx), num_classes=len(types)).float()
             y = torch.zeros(size=(1, 0), dtype=torch.float) # Extra data (i.e. time)
-
-            x_b,edge_bead,bead_freq = self.process_bead(beads_list[i])
+            guidance = dg_wo_cg[i]
             bead_graph = beads_list[i]
             # Note Contents of this object are:
             # x: nodes AA (atom types), edge_index: edges AA(bonds), edge_attr: edges types AA
@@ -244,9 +171,11 @@ class DataManagment:
             # bead_graph: String representing CG, n_bead: Constant (need for batching)
             # bead_freq: frequency of the beads (require for conditional dropout)
             # original_smiles: string of the AA molecule
-            data = BeadData(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y, idx=i,
-                        x_beads=x_b, edge_index_beads = edge_bead,bead_graph=bead_graph,
-                        n_bead=self.n_nodes_bead,bead_freq=bead_freq,original_smiles=smile)
+   #         data = BeadData(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y, idx=i,
+   #                     x_beads=x_b, edge_index_beads = edge_bead,bead_graph=bead_graph,
+   #                     n_bead=self.n_nodes_bead,bead_freq=bead_freq,original_smiles=smile)
+            data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr,y=y, idx=i,guidance=guidance,
+                        bead_graph=bead_graph, original_smiles=smile)
             if self.filter_dataset:
                 # Try to build the molecule again from the graph. If it fails, do not add it to the training set
                 dense_data, node_mask = to_dense(data.x, data.edge_index, data.edge_attr, data.batch)
@@ -327,21 +256,21 @@ class MoleculeDataloader(InMemoryDataset):
             self.data, self.slices = data_smiles
 
 
-class BeadData(Data):
-    def __inc__(self, key, value, *args, **kwargs):
-        if key == 'edge_index_beads':
+#class BeadData(Data):
+    #def __inc__(self, key, value, *args, **kwargs):
+       # if key == 'edge_index_beads':
             # how much to shift bead node indices when batching
-            if getattr(self, 'x_beads', None) is not None:
-                return self.x_beads.size(0)
-            if hasattr(self, 'n_bead'):
-                return int(self.n_bead)
-            raise ValueError("Need x_beads or n_bead to shift edge_index_beads.")
-        return super().__inc__(key, value, *args, **kwargs)
+          #  if getattr(self, 'x_beads', None) is not None:
+         #       return self.x_beads.size(0)
+        #    if hasattr(self, 'n_bead'):
+       #         return int(self.n_bead)
+      #      raise ValueError("Need x_beads or n_bead to shift edge_index_beads.")
+     #   return super().__inc__(key, value, *args, **kwargs)
 
-    def __cat_dim__(self, key, value, *args, **kwargs):
-        if key == 'edge_index_beads':
-            return 1  # concatenate edge indices along columns
-        return super().__cat_dim__(key, value, *args, **kwargs)
+   # def __cat_dim__(self, key, value, *args, **kwargs):
+    #    if key == 'edge_index_beads':
+    #        return 1  # concatenate edge indices along columns
+    #    return super().__cat_dim__(key, value, *args, **kwargs)
 
 
 

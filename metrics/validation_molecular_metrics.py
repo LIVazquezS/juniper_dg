@@ -41,7 +41,7 @@ class SamplingMolecularMetrics(nn.Module):
         self.train_smiles = train_smiles
         self.dataset_info = di
 
-    def forward(self, molecules, name, current_epoch, val_counter, test=False):
+    def forward(self, molecules, name, current_epoch, val_counter, test=False, local_rank=None):
 
         stability, rdkit_metrics, all_smiles = compute_molecular_metrics(molecules,
                                                                          self.train_smiles,

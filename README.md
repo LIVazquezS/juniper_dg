@@ -1,25 +1,25 @@
-# 🎈 Blank app template
+# Juniper DG
 
-A simple Streamlit app template for you to modify!
+A Streamlit app for running the jupyter dg code online.
+
 
 [![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://blank-app-template.streamlit.app/)
 
-### How to run it on your own machine
+## Deployment
 
-Prerequisite: install `uv` if you don't already have it.
+The app's entry point is `gen_app.py`.
 
-```
-$ curl -LsSf https://astral.sh/uv/install.sh | sh
-```
+- **Streamlit Community Cloud**: set "Main file path" to `gen_app.py` when
+  creating the app at share.streamlit.io — this is a deployment setting,
+  not a repo file, so it must be set there directly.
+- **Other hosts (Render, Railway, Heroku, custom containers)**: the
+  included `Procfile` already points to `gen_app.py`
+  (`streamlit run gen_app.py --server.port=$PORT --server.headless=true`).
 
-1. Sync the dependencies
+## Citation
 
-   ```
-   $ uv sync
-   ```
+TBA
 
-2. Run the app
+## Problems or Questions?
 
-   ```
-   $ uv run streamlit run streamlit_app.py
-   ```
+Contact: L.I.Vazquez-Salazar (mailto:l.i.vazquez-salazar@thphys.uni-heidelberg.de)

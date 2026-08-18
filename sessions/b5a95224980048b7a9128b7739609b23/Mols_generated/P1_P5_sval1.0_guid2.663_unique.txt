@@ -1,0 +1,10 @@
+CON=CNC(N)=O
+Nc1nc(=NO)on1O
+N#CC(=O)C(O)CO
+CC(C)(CO)NCCN
+NCC(F)=CNC(N)=O
+CNN=CN1CC1CN
+C=NN1C(C)C1C(=N)N
+CC(=CC(=O)NO)CN
+O=c1nccc(O)n1O
+NN=c1cncnn1N

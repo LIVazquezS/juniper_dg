@@ -128,8 +128,6 @@ def build_cg_from_string_ind(mol):
     is_s = [b[:1] == "S" for b in bead_sp]
     keys = [b[1:] if s else b for b, s in zip(bead_sp, is_s)]
     dg = [dg_bead[b] for b in bead_sp]
-    # print(keys)
-    # print(is_s)
     idx = [beads_labels[k] for k in keys]
 
     idx_t = torch.tensor(idx, dtype=torch.long)

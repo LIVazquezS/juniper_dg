@@ -144,8 +144,9 @@ class BasicMolecularMetrics(object):
                 all_smiles.append(None)
             except:
                 print('A weird error occured')
+            is_disconnected = mol_frags is not None and len(mol_frags) > 1
             if smiles is not None and direct_valid:
-                if len(mol_frags) > 1 and mol_frags is not None and not self.exclude_disconnected:
+                if is_disconnected and not self.exclude_disconnected:
                     print(f'The generated molecule is disconnected with: {len(mol_frags)} fragments \n'+
                           'The largest fragment would be used as molecule \n' +
                           'Notice the molecule has a valid smiles representation')
@@ -153,14 +154,14 @@ class BasicMolecularMetrics(object):
                     try:
                         smiles = self.mol2smiles(largest_mol)
                         valid.append(smiles)
+                        all_smiles.append(smiles)
                     except:
                         print(f'The largest fragment could not be used as molecule')
                         all_smiles.append(smiles)
                 else:
+                    if is_disconnected:
+                        print('The generated molecule is disconnected with:', len(mol_frags), 'fragments')
                     valid.append(smiles)
-                    all_smiles.append(smiles)
-                if self.exclude_disconnected:
-                    print('The generated molecule is disconnected with:', len(mol_frags), 'fragments')
                     all_smiles.append(smiles)
             else:
                 all_smiles.append(smiles)

@@ -1,13 +1,16 @@
+# Basic packages
 import torch
 from lightning.pytorch import Trainer
 import pandas as pd
+import os
+
 # # Local model
 from diff_module import DiscDenDiff
 from metrics.validation_molecular_metrics import SamplingMolecularMetrics
 from databases.get_infos import Datasetinfos
-from databases.data_manage_simple_label import DataManagment
+from databases.data_managment import DataManagment
 from types import SimpleNamespace
-
+from prop_calc import calculate_gen_prop
 from utils.rdkit_functions import compute_molecular_metrics
 
 # Some options for torch
@@ -25,12 +28,11 @@ nn_params = SimpleNamespace(**nn_params)
 #Guidance parameters
 guidance = True
 dropout_fix = True
-s = 2.0 #Conditional weight
-# p = [0,0.2,1.0] #Dropout
+
 p = 0.2
 guidance_in = 'y'
 trainable_cf = True
-guidance_parms = {'guidance_in':guidance_in,'s':s,'dropout_fix':dropout_fix,'p_dropout':p,'trainable_cf':trainable_cf,}
+guidance_parms = {'guidance_in':guidance_in,'dropout_fix':dropout_fix,'p_dropout':p,'trainable_cf':trainable_cf,}
 guidance_params = SimpleNamespace(**guidance_parms)
 # Training parameters
 train_lr = 0.0001
@@ -94,33 +96,41 @@ dataset_infos.ensure_dims(datamodule=dm, guidance=True,guidance_size=1)
 # Sampling metrics
 sampling_metrics = SamplingMolecularMetrics(dataset_infos, train_smiles)
 
-# Model start
-model = DiscDenDiff_Single(name,
-                 dataset_infos,
-                 nn_params,
-                 train_params,
-                 diffusion_params,
-                 None,
-                 sampling_metrics,
-                 val_param,
-                 test_param,
-                 guidance=guidance,
-                 guidance_params=guidance_params,)
+def initialize_model(s,file_ckpt):
+    # Fix the condition
+    guidance_params.s = s
+    # Model start
+    model = DiscDenDiff(name,
+                               dataset_infos,
+                               nn_params,
+                               train_params,
+                               diffusion_params,
+                               None,
+                               sampling_metrics,
+                               val_param,
+                               test_param,
+                               guidance=guidance,
+                               guidance_params=guidance_params, )
+
+    # Training
+    use_gpu = True
+    trainer = Trainer(gradient_clip_val=clip_grad,
+                      strategy="ddp_find_unused_parameters_true",  # Needed to load old
+                      accelerator='gpu' if use_gpu else 'cpu',
+                      devices=1,
+                      max_epochs=n_epochs,
+                      check_val_every_n_epoch=check_val_every_n_epochs,
+                      fast_dev_run=False,
+                      enable_progress_bar=True,
+                      log_every_n_steps=50,
+                      logger=[])
+
+    ckpt = torch.load(file_ckpt)
+    model.load_state_dict(ckpt['state_dict'])
+    model._trainer = trainer
+    return model
 
 
-ckpt = None
-#Training
-use_gpu = True
-trainer = Trainer(gradient_clip_val=clip_grad,
-                  strategy = "ddp_find_unused_parameters_true",  # Needed to load old
-                  accelerator='gpu' if use_gpu else 'cpu',
-                  devices=1,
-                  max_epochs=n_epochs,
-                  check_val_every_n_epoch=check_val_every_n_epochs,
-                  fast_dev_run=False,
-                  enable_progress_bar=True,
-                  log_every_n_steps=50,
-                  logger = [])
 
 def create_natoms_tensor(file,n_samples=10):
     df_dist = pd.read_csv(file)
@@ -148,60 +158,82 @@ def write_mols(all_smiles,name_file):
                 f.write('Fail' + '\n')
 
 
-def get_mols(file_out,file_cktp,guidance,dist_natoms=None,bs=100,kc=5,nc_steps=5):
+def get_mols(model,file_out,guidance,dist_natoms=None,bs=100,kc=5,nc_steps=5):
     '''
+    model: Initialized model
     file_out: Label of the files to be saved
-    file_ckpt: Pytorch checkpoint
     guidance: value of DG
     bs (optional): batch size (Number of molecules to generate)
     kc (optional) : keep chain (How many chains are saved)
     nc_steps (optional): number of chain steps
     '''
-    ckpt = torch.load(file_cktp)
-    model.load_state_dict(ckpt['state_dict'])
-    model._trainer = trainer
 
-    print('The checkpoint used is:{}'.format(file_cktp))
-
-    if dist_natoms is not None:
-        if isinstance(dist_natoms, str):
-            dist_nodes = create_natoms_tensor(dist_natoms, n_samples=bs)
-        elif isinstance(dist_natoms, int):
-            dist_nodes = dist_natoms
+    if dist_natoms is None:
+        dist_nodes = create_natoms_tensor('n_atoms_dim.csv', n_samples=bs)
+    elif isinstance(dist_natoms, int):
+        dist_nodes = dist_natoms
+    elif isinstance(dist_natoms, str):
+        dist_nodes = create_natoms_tensor(dist_natoms, n_samples=bs)
     else:
         dist_nodes = None
 
     guidance_val = torch.tensor([guidance])
-    dist_nodes = create_natoms_tensor(dist_natoms, n_samples=bs)
+
     mols = model.sample_batch(bs,kc,nc_steps,dist_nodes,guidance_val)
 
     dct_metrics,unique,novel,all_smiles = compute_molecular_metrics(mols, train_smiles, dataset_infos,testing=True)
 
     df_metrics = pd.DataFrame(dct_metrics, index=[0])
 
-
-    n_nodes_name = 'const'
-
-    name_metrics = file_out + '_' + n_nodes_name +'.csv'
+    name_metrics = file_out + '.csv'
 
     df_metrics.to_csv(name_metrics,index=False)
 
-    name_unique = file_out +  '_' + n_nodes_name + '_unique'
+    name_unique = file_out +  '_' + 'unique'
     write_mols(unique, name_unique)
 
-    name_novel = file_out  +  '_' + n_nodes_name + '_novel'
+    name_novel = file_out  +  '_'  + 'novel'
     write_mols(novel, name_novel)
 
-    name_all = file_out +  '_' + n_nodes_name + '_all'
+    name_all = file_out +  '_' + 'all'
     write_mols(all_smiles, name_all)
 
     return None
 
 
+def mols_gen(key,guidance,value_s,n_mols,n_atoms,session_dir,calculate_prop=False,sasa_calc=False):
+
+    ckpt_model = 'checkpoints/last.ckpt'
+    if value_s is None:
+        value_s = 1.0
+    if n_mols is None or n_mols == 0: n_mols = 100
+    if n_atoms is None or n_atoms == 0: n_atoms = 'n_atoms_dim.csv'
+
+    if sasa_calc and not calculate_prop:
+        raise ValueError('You need to calculate properties to compute SASA')
+
+    model = initialize_model(value_s,ckpt_model)
+
+    name_folder = f'{session_dir}/Mols_generated'
+    folder_save = os.makedirs(name_folder,exist_ok=True)
+    file_out = f'{name_folder}/{key}_sval{value_s}_guid{guidance}'
+
+    get_mols(model, file_out, guidance, n_atoms, bs=n_mols)
+
+    file_mols_gen = f'{name_folder}/{key}_sval{value_s}_guid{guidance}' + '_unique.txt'
+    if calculate_prop:
+        df_gen_prop = calculate_gen_prop(file_mols_gen,guidance,key,sasa_calc=sasa_calc)
+    else:
+        df_gen_prop = pd.read_csv(file_mols_gen, names=['smiles'])
+
+    return df_gen_prop, file_mols_gen
 
 
-ckpt_model = 'checkpoints/ud_dgwo_cft_dpf/last.ckpt'
-n_mol_to_gen = 100
 
-file_out = 'Gen_dim_by_dg_s2/mol_dim_s2_P5_C2'
-get_mols(file_out,ckpt_model,guidance_val,'n_atoms_dim.csv',bs=n_mol_to_gen)
+
+
+
+
+
+
+
