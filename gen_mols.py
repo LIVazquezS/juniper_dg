@@ -86,7 +86,7 @@ data_mols = DataManagment('uni_dim_single',data_source, 0.9,
 dm = data_mols.get_dataset()
 
 # Dataset infos
-dataset_infos = Datasetinfos(dm, recompute_statistics=True,file_dim='dimensions_single.json')
+dataset_infos = Datasetinfos(dm, recompute_statistics=False,file_dim='dimensions_single.json')
 df_train_smiles = pd.read_csv('new_train_uni_dim_single.smiles',names=['smiles'])
 train_smiles = df_train_smiles['smiles'].values
 
@@ -114,18 +114,14 @@ def initialize_model(s,file_ckpt):
 
     # Training
 
-    trainer = Trainer(gradient_clip_val=clip_grad,
-                      strategy="ddp_find_unused_parameters_true",  # Needed to load old
-                      accelerator='auto',
+    trainer = Trainer(accelerator='auto',
                       devices=1,
-                      max_epochs=n_epochs,
-                      check_val_every_n_epoch=check_val_every_n_epochs,
+                      strategy='auto',
                       fast_dev_run=False,
-                      enable_progress_bar=True,
-                      log_every_n_steps=50,
-                      logger=[])
+                      enable_progress_bar=False,
+                      logger=False)
 
-    ckpt = torch.load(file_ckpt)
+    ckpt = torch.load(file_ckpt,map_location="cpu",weights_only=False)
     model.load_state_dict(ckpt['state_dict'])
     model._trainer = trainer
     return model
@@ -177,7 +173,13 @@ def get_mols(model,file_out,guidance,dist_natoms=None,bs=100,kc=5,nc_steps=5):
     else:
         dist_nodes = None
 
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model.to(device)
+
     guidance_val = torch.tensor([guidance])
+    guidance_val = guidance_val.to(device)
+    if torch.is_tensor(dist_nodes):
+        dist_nodes = dist_nodes.to(device)
 
     mols = model.sample_batch(bs,kc,nc_steps,dist_nodes,guidance_val)
 
