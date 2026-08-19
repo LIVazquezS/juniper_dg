@@ -125,7 +125,7 @@ def initialize_model(s,file_ckpt):
                       log_every_n_steps=50,
                       logger=[])
 
-    ckpt = torch.load(file_ckpt)
+    ckpt = torch.load(file_ckpt,map_location="cpu")
     model.load_state_dict(ckpt['state_dict'])
     model._trainer = trainer
     return model
