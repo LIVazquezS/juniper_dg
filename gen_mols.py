@@ -113,10 +113,10 @@ def initialize_model(s,file_ckpt):
                                guidance_params=guidance_params, )
 
     # Training
-    use_gpu = True
+
     trainer = Trainer(gradient_clip_val=clip_grad,
                       strategy="ddp_find_unused_parameters_true",  # Needed to load old
-                      accelerator='gpu' if use_gpu else 'cpu',
+                      accelerator='auto',
                       devices=1,
                       max_epochs=n_epochs,
                       check_val_every_n_epoch=check_val_every_n_epochs,
